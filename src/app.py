@@ -6,10 +6,15 @@ from flask import Flask, request, jsonify, url_for, send_from_directory
 from flask_migrate import Migrate
 from flask_swagger import swagger
 from api.utils import APIException, generate_sitemap
-from api.models import db
+from api.models import db, User
 from api.routes import api
 from api.admin import setup_admin
 from api.commands import setup_commands
+#imporaciones de Flask JWT
+from flask_jwt_extended import create_access_token
+from flask_jwt_extended import get_jwt_identity
+from flask_jwt_extended import jwt_required
+from flask_jwt_extended import JWTManager
 
 # from models import Person
 
@@ -18,6 +23,11 @@ static_file_dir = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), '../public/')
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+
+# Setup the Flask-JWT-Extended extension
+app.config["JWT_SECRET_KEY"] = "super-secret"  # Change this!
+jwt = JWTManager(app)
+
 
 # database condiguration
 db_url = os.getenv("DATABASE_URL")
@@ -48,6 +58,31 @@ def handle_invalid_usage(error):
     return jsonify(error.to_dict()), error.status_code
 
 # generate sitemap with all your endpoints
+
+# Create a route to authenticate your users and return JWTs. The
+# create_access_token() function is used to actually generate the JWT.
+@app.route("/login", methods=["POST"])
+def login():
+    #body = request.json
+    email = request.json.get("email", None)
+    password = request.json.get("password", None)
+    user_query = User.query.filter_by(email=email).first()
+    
+    if email != user_query.email or password != user_query.password:
+        return jsonify({"msg": "Bad email or password"}), 401
+
+    access_token = create_access_token(identity=email)
+    return jsonify(access_token=access_token)
+
+
+# Protect a route with jwt_required, which will kick out requests
+# without a valid JWT present.
+@app.route("/protected", methods=["GET"])
+@jwt_required()
+def protected():
+    # Access the identity of the current user with get_jwt_identity
+    current_user = get_jwt_identity()
+    return jsonify(logged_in_as=current_user), 200
 
 
 @app.route('/')
